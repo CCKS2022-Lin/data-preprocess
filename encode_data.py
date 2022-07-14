@@ -6,43 +6,52 @@ import argparse
 from transformers import AutoTokenizer, AutoModel
 
 
-def read_dataset(p):
-    with open(p) as f:
-        cnt = 0
-        dropped = 0
-        doc = {}
-        for line in f:
-            if line.strip() == '':
-                cnt = 0
-                if doc["q"] is not None and doc["rel"] is not None:
-                    yield doc
+def read_dataset(p, is_test=False):
+    if is_test:
+        with open(p) as f:
+            for line in f:
+                if line.strip() == '':
+                    continue
                 else:
-                    dropped += 1
-                doc = {}
-            else:
-                cnt += 1
-                if cnt == 1:
-                    doc["q"] = line.strip().split(':')[1]
-                if cnt == 2:
-                    if line.count('.') > 1:
-                        doc["rel"] = None
+                    yield {
+                        "q": line.strip().split(':')[1]
+                    }
+    else:
+        with open(p) as f:
+            cnt = 0
+            dropped = 0
+            doc = {}
+            for line in f:
+                if line.strip() == '':
+                    cnt = 0
+                    if doc["q"] is not None and doc["rel"] is not None:
+                        yield doc
                     else:
-                        rel = re.match(r".*\{\s*(\?\w|<.*>|\".*\")\s*(\?\w|<.*>|\".*\")\s*(\?\w|<.*>|\".*\").*}.*",
-                                       line).group(2)
-                        if len(rel) > 2:
-                            doc["rel"] = rel[1:-1]
-                            # print(line.strip())
-                        else:
+                        dropped += 1
+                    doc = {}
+                else:
+                    cnt += 1
+                    if cnt == 1:
+                        doc["q"] = line.strip().split(':')[1]
+                    if cnt == 2:
+                        if line.count('.') > 1:
                             doc["rel"] = None
-                if cnt == 3:
-                    ans = line.strip().split("\t")[0]
-                    if ans.startswith("\"") or ans.startswith("<"):
-                        doc["ans"] = ans[1:-1]
+                        else:
+                            rel = re.match(r".*\{\s*(\?\w|<.*>|\".*\")\s*(\?\w|<.*>|\".*\")\s*(\?\w|<.*>|\".*\").*}.*",
+                                           line).group(2)
+                            if len(rel) > 2:
+                                doc["rel"] = rel[1:-1]
+                                # print(line.strip())
+                            else:
+                                doc["rel"] = None
+                    if cnt == 3:
+                        doc["ans"] = line.strip().split("\t")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Encode dataset.")
     parser.add_argument("file", type=str, help="path the the input dataset file")
+    parser.add_argument("--is_test", action="store_true", help="load the test dataset")
     args = parser.parse_args()
     print(f"parsing file {args.file}")
     path_frag = args.file.split(".")
@@ -54,7 +63,7 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     encoder = AutoModel.from_pretrained(pretrained_model)
 
-    dataset = list(read_dataset(args.file))
+    dataset = list(read_dataset(args.file, args.is_test))
 
     with torch.no_grad():
         for item in tqdm(dataset):
